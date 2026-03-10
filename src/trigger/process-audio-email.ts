@@ -47,7 +47,7 @@ export const processAudioEmail = task({
         });
 
         const { text: summary } = await generateText({
-          model: openai("gpt-4o-mini"),
+          model: "openai/gpt-5.1-thinking",
           system: `You are an expert at analyzing transcribed audio notes. Extract all meaningful information and organize it clearly.
 
 Your response should include:
