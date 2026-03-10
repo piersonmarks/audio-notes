@@ -14,15 +14,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { connection } from "next/server";
-import { getAllInboundEmails } from "@/lib/db/queries";
+import { fetchQuery } from "convex/nextjs";
+import { api } from "../../convex/_generated/api";
 import { AddEmailDialog } from "@/components/add-email-dialog";
 import { EmailRowActions } from "@/components/email-row-actions";
 import { AllowedSendersCell } from "@/components/allowed-senders-cell";
 
 export async function EmailList() {
-  await connection();
-  const users = await getAllInboundEmails();
+  const users = await fetchQuery(api.inboundEmails.getAll);
 
   if (users.length === 0) {
     return (

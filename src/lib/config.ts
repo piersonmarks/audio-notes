@@ -1,6 +1,9 @@
-import { getInboundEmailByAddress } from "./db/queries";
+import { fetchQuery } from "convex/nextjs";
+import { api } from "../../convex/_generated/api";
 
-export { getInboundEmailByAddress as getUserByInboundEmail };
+export async function getUserByInboundEmail(email: string) {
+  return await fetchQuery(api.inboundEmails.getByEmail, { email });
+}
 
 export function isSenderAllowed(
   allowedList: string[],

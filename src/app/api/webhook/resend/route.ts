@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { tasks } from "@trigger.dev/sdk";
-import { put } from "@vercel/blob";
+import { Resend } from "resend";
 import { getUserByInboundEmail, isSenderAllowed } from "@/lib/config";
 import type { processAudioEmail } from "@/trigger/process-audio-email";
 
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const event = await req.json();
 
-    // Resend inbound webhook payload
-    const { from, to, subject, attachments } = body;
+    if (event.type !== "email.received") {
+      return NextResponse.json({ status: "ignored" });
+    }
+
+    const { from, to, subject, email_id } = event.data;
 
     if (!from || !to) {
       return NextResponse.json(
@@ -54,38 +59,31 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // Upload audio attachments to Vercel Blob in parallel
-      const audioAttachments = (attachments ?? []).filter(
-        (a: { content_type: string }) => a.content_type?.startsWith("audio/")
-      );
+      // Fetch attachments via Resend Attachments API
+      const { data: attachmentsResponse } =
+        await resend.emails.receiving.attachments.list({
+          emailId: email_id,
+        });
 
-      const blobUrls = await Promise.all(
-        audioAttachments.map(async (att: { filename: string; content: string; content_type: string }) => {
-          const buffer = Buffer.from(att.content, "base64");
-          const blob = await put(
-            `audio/${user.id}/${Date.now()}-${att.filename}`,
-            buffer,
-            { access: "public", contentType: att.content_type }
-          );
-          return {
-            filename: att.filename,
-            url: blob.url,
-            contentType: att.content_type,
-          };
-        })
-      );
+      const audioAttachments = (attachmentsResponse?.data ?? [])
+        .filter((a) => a.content_type?.startsWith("audio/"))
+        .map((att) => ({
+          filename: att.filename ?? "audio",
+          downloadUrl: att.download_url,
+          contentType: att.content_type,
+        }));
 
-      if (blobUrls.length === 0) {
+      if (audioAttachments.length === 0) {
         console.log("No audio attachments found");
         continue;
       }
 
-      // Trigger the task with blob URLs instead of raw base64
+      // Trigger the task with download URLs (valid for 1 hour)
       await tasks.trigger<typeof processAudioEmail>("process-audio-email", {
         from: senderEmail,
         to: inboundEmail,
         subject: subject ?? "",
-        attachments: blobUrls,
+        attachments: audioAttachments,
       });
 
       console.log(`Triggered audio processing for ${inboundEmail}`);

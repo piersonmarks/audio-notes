@@ -2,7 +2,6 @@ import { task, logger } from "@trigger.dev/sdk";
 import { experimental_transcribe as transcribe, generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { Resend } from "resend";
-import { del } from "@vercel/blob";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -12,7 +11,7 @@ interface AudioEmailPayload {
   subject: string;
   attachments: Array<{
     filename: string;
-    url: string; // Vercel Blob URL
+    downloadUrl: string; // Resend temporary download URL (valid 1 hour)
     contentType: string;
   }>;
 }
@@ -39,7 +38,7 @@ export const processAudioEmail = task({
 
         const { text: transcription } = await transcribe({
           model: openai.transcription("whisper-1"),
-          audio: new URL(attachment.url),
+          audio: new URL(attachment.downloadUrl),
         });
 
         logger.info("Transcription complete", {
@@ -71,15 +70,7 @@ Only include sections that have content. Format using clean HTML for email reada
       })
     );
 
-    // Clean up blobs after all processing (non-fatal)
-    await Promise.allSettled(
-      attachments.map(async (attachment) => {
-        await del(attachment.url);
-        logger.info(`Cleaned up blob: ${attachment.filename}`);
-      })
-    );
-
-    // Step 3: Send the results back via email
+    // Send the results back via email
     const emailBody = results
       .map(
         (r) => `
