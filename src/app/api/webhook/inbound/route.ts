@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "ignored" });
     }
 
-    const { from, to, subject, email_id } = event.data;
+    const { from, to, subject, email_id, message_id } = event.data;
 
     if (!from || !to) {
       return NextResponse.json(
@@ -114,6 +114,7 @@ export async function POST(req: NextRequest) {
         subject: subject ?? "",
         attachments: audioAttachments,
         model: emailConfig.model,
+        messageId: message_id,
       });
 
       console.log(`Triggered audio processing for ${inboundAddress}`);

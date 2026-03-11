@@ -29,6 +29,7 @@ interface AudioEmailPayload {
     contentType: string;
   }>;
   model?: string;
+  messageId?: string;
 }
 
 export const processAudioEmail = task({
@@ -49,7 +50,7 @@ export const processAudioEmail = task({
     }
   },
   run: async (payload: AudioEmailPayload) => {
-    const { userId, from, to, inboundEmailId, subject, attachments, model: modelId } = payload;
+    const { userId, from, to, inboundEmailId, subject, attachments, model: modelId, messageId } = payload;
     const summaryModel = openai(modelId || DEFAULT_MODEL);
 
     // Create record with in_progress status (reuse on retry)
@@ -130,10 +131,6 @@ For actionItems: extract any tasks, to-dos, follow-ups, or deadlines mentioned. 
               ${r.actionItems.map((item) => `<li style="margin-bottom: 4px;">${item}</li>`).join("")}
             </ul>
           </div>` : ""}
-          <details style="margin-top: 16px;">
-            <summary style="cursor: pointer; color: #6b7280; font-size: 14px;">View Full Transcription</summary>
-            <div style="margin-top: 8px; padding: 12px; background: #f9fafb; border-radius: 4px; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${r.transcription}</div>
-          </details>
         </div>`
       )
       .join("");
@@ -141,12 +138,19 @@ For actionItems: extract any tasks, to-dos, follow-ups, or deadlines mentioned. 
     const replySubject = subject
       ? `Re: ${subject} - Audio Notes Processed`
       : "Your Audio Notes - Processed";
-    const fromDomain = process.env.RESEND_INBOUND_DOMAIN ?? "yourdomain.com";
+    const sendingDomain = process.env.RESEND_SENDING_DOMAIN ?? "resend.dev";
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
     await resend.emails.send({
-      from: `Audio Notes <notes@${fromDomain}>`,
+      from: `Audio Notes <notes@${sendingDomain}>`,
       to: from,
       subject: replySubject,
+      ...(messageId && {
+        headers: {
+          "In-Reply-To": messageId,
+          "References": messageId,
+        },
+      }),
       html: `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 640px; margin: 0 auto; padding: 20px;">
           <div style="margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #111827;">
@@ -156,8 +160,11 @@ For actionItems: extract any tasks, to-dos, follow-ups, or deadlines mentioned. 
             </p>
           </div>
           ${emailBody}
-          <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 12px;">
-            Processed by Audio Notes
+          <div style="text-align: center; margin-top: 24px;">
+            <a href="${appUrl}/app" style="display: inline-block; padding: 10px 24px; background: #111827; color: #ffffff; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500;">View full transcription & details</a>
+          </div>
+          <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 12px; text-align: center;">
+            Powered by <a href="${appUrl}" style="color: #9ca3af;">Audio Notes</a>
           </div>
         </div>`,
     });
