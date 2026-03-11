@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { tasks } from "@trigger.dev/sdk";
 import { Resend } from "resend";
-import { getUserByInboundEmail, isSenderAllowed } from "@/lib/config";
+import { getInboundEmailConfig, isSenderAllowed } from "@/lib/config";
 import type { processAudioEmail } from "@/trigger/process-audio-email";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -33,28 +33,28 @@ export async function POST(req: NextRequest) {
           "";
 
     for (const toAddress of rawTo) {
-      const inboundEmail: string =
+      const inboundAddress: string =
         typeof toAddress === "string"
           ? toAddress
           : toAddress.address ?? toAddress.email ?? "";
 
-      // Look up the user config for this inbound email
-      const user = await getUserByInboundEmail(inboundEmail);
+      // Look up the inbound email configuration
+      const emailConfig = await getInboundEmailConfig(inboundAddress);
 
-      if (!user) {
-        console.log(`No user found for inbound email: ${inboundEmail}`);
+      if (!emailConfig) {
+        console.log(`No inbound email config found for: ${inboundAddress}`);
         continue;
       }
 
-      if (!user.enabled) {
-        console.log(`User is disabled: ${inboundEmail}`);
+      if (!emailConfig.enabled) {
+        console.log(`Inbound email is disabled: ${inboundAddress}`);
         continue;
       }
 
       // Check sender allowlist
-      if (!isSenderAllowed(user.allowedSenders, senderEmail)) {
+      if (!isSenderAllowed(emailConfig.allowedSenders, senderEmail)) {
         console.log(
-          `Sender ${senderEmail} not in allowlist for ${inboundEmail}`
+          `Sender ${senderEmail} not in allowlist for ${inboundAddress}`
         );
         continue;
       }
@@ -81,12 +81,12 @@ export async function POST(req: NextRequest) {
       // Trigger the task with download URLs (valid for 1 hour)
       await tasks.trigger<typeof processAudioEmail>("process-audio-email", {
         from: senderEmail,
-        to: inboundEmail,
+        to: inboundAddress,
         subject: subject ?? "",
         attachments: audioAttachments,
       });
 
-      console.log(`Triggered audio processing for ${inboundEmail}`);
+      console.log(`Triggered audio processing for ${inboundAddress}`);
     }
 
     return NextResponse.json({ status: "ok" });

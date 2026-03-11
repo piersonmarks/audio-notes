@@ -1,7 +1,7 @@
 import { fetchQuery } from "convex/nextjs";
 import { api } from "../../convex/_generated/api";
 
-export async function getUserByInboundEmail(email: string) {
+export async function getInboundEmailConfig(email: string) {
   return await fetchQuery(api.inboundEmails.getByEmail, { email });
 }
 

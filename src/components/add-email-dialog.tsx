@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useActionState } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { toast } from "sonner";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -15,79 +18,128 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { addInboundEmail } from "@/lib/actions";
+import {
+  Field,
+  FieldLabel,
+  FieldDescription,
+  FieldError,
+} from "@/components/ui/field";
+import { TagInput } from "@/components/tag-input";
 
-export function AddEmailDialog({ label = "Add Email Address" }: { label?: string }) {
+const formSchema = z.object({
+  allowedSenders: z.string(),
+  tags: z.array(z.string()),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
+function parseSendersList(input: string): string[] {
+  return input
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export function AddEmailDialog({
+  label = "Add Email Address",
+}: {
+  label?: string;
+}) {
   const [open, setOpen] = useState(false);
+  const create = useMutation(api.inboundEmails.create);
 
-  const [, formAction, isPending] = useActionState(
-    async (_prev: unknown, formData: FormData) => {
-      const result = await addInboundEmail(formData);
-      if (result?.error) {
-        toast.error(result.error);
-        return result;
-      }
-      toast.success("Inbound email address created");
-      setOpen(false);
-      return result;
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      allowedSenders: "",
+      tags: [],
     },
-    null
-  );
+  });
+
+  async function onSubmit(data: FormValues) {
+    try {
+      await create({
+        allowedSenders: data.allowedSenders
+          ? parseSendersList(data.allowedSenders)
+          : [],
+        tags: data.tags,
+      });
+      toast.success("Inbound email address created");
+      form.reset();
+      setOpen(false);
+    } catch {
+      toast.error("Failed to create inbound email");
+    }
+  }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        setOpen(value);
+        if (!value) form.reset();
+      }}
+    >
       <DialogTrigger asChild>
         <Button>{label}</Button>
       </DialogTrigger>
       <DialogContent>
-        <form action={formAction}>
+        <form onSubmit={form.handleSubmit(onSubmit)}>
           <DialogHeader>
             <DialogTitle>Create Inbound Email</DialogTitle>
             <DialogDescription>
-              Set up a new email address that will accept audio attachments and
-              process them.
+              A unique email address will be generated that accepts audio
+              attachments and processes them.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="email">Inbound Email Address</Label>
-              <Input
-                id="email"
-                name="email"
-                placeholder="mynotes@inbound.yourdomain.com"
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                This is the address people will send audio files to.
-              </p>
-            </div>
+            <Controller
+              name="allowedSenders"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor={field.name}>
+                    Allowed Senders (optional)
+                  </FieldLabel>
+                  <Input
+                    {...field}
+                    id={field.name}
+                    aria-invalid={fieldState.invalid}
+                    placeholder="example.com, user@other.com"
+                    autoComplete="off"
+                  />
+                  <FieldDescription>
+                    Comma-separated list of domains or emails. Leave empty to
+                    allow all senders.
+                  </FieldDescription>
+                  {fieldState.invalid && (
+                    <FieldError errors={[fieldState.error]} />
+                  )}
+                </Field>
+              )}
+            />
 
-            <div className="grid gap-2">
-              <Label htmlFor="ownerEmail">Owner Email</Label>
-              <Input
-                id="ownerEmail"
-                name="ownerEmail"
-                placeholder="you@example.com"
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                Your real email for account management.
-              </p>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="allowedSenders">Allowed Senders (optional)</Label>
-              <Input
-                id="allowedSenders"
-                name="allowedSenders"
-                placeholder="example.com, user@other.com"
-              />
-              <p className="text-xs text-muted-foreground">
-                Comma-separated list of domains or emails. Leave empty to allow
-                all senders.
-              </p>
-            </div>
+            <Controller
+              name="tags"
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel>Tags (optional)</FieldLabel>
+                  <TagInput
+                    value={field.value}
+                    onChange={field.onChange}
+                    placeholder="Type a tag and press Enter"
+                  />
+                  <FieldDescription>
+                    Press Enter or comma to add a tag.
+                  </FieldDescription>
+                  {fieldState.invalid && (
+                    <FieldError errors={[fieldState.error]} />
+                  )}
+                </Field>
+              )}
+            />
           </div>
 
           <DialogFooter>
@@ -98,8 +150,8 @@ export function AddEmailDialog({ label = "Add Email Address" }: { label?: string
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Creating..." : "Create"}
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting ? "Creating..." : "Create"}
             </Button>
           </DialogFooter>
         </form>
