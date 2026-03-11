@@ -1,19 +1,34 @@
-import { task, logger } from "@trigger.dev/sdk";
-import { experimental_transcribe as transcribe, generateText } from "ai";
+import { task, logger, metadata } from "@trigger.dev/sdk";
+import { generateText, Output } from "ai";
 import { openai } from "@ai-sdk/openai";
+import { z } from "zod";
 import { Resend } from "resend";
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
+
+const summarySchema = z.object({
+  title: z.string().describe("A single-line title summarizing the audio note"),
+  summary: z.string().describe("Plain text summary of all key points from the audio"),
+  actionItems: z.array(z.string()).describe("Single-line action items, tasks, or follow-ups mentioned"),
+});
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+const DEFAULT_MODEL = "gpt-5.4";
 
 interface AudioEmailPayload {
+  userId: string;
   from: string;
   to: string;
+  inboundEmailId: string;
   subject: string;
   attachments: Array<{
     filename: string;
-    downloadUrl: string; // Resend temporary download URL (valid 1 hour)
+    downloadUrl: string;
     contentType: string;
   }>;
+  model?: string;
 }
 
 export const processAudioEmail = task({
@@ -21,85 +36,111 @@ export const processAudioEmail = task({
   retry: {
     maxAttempts: 3,
   },
+  onFailure: async ({ error }) => {
+    const id = metadata.get("processedEmailId") as
+      | Id<"processedEmails">
+      | undefined;
+    if (id) {
+      await convex.mutation(api.processedEmails.updateStatus, {
+        id,
+        status: "error",
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
   run: async (payload: AudioEmailPayload) => {
-    const { from, to, subject, attachments } = payload;
+    const { userId, from, to, inboundEmailId, subject, attachments, model: modelId } = payload;
+    const summaryModel = openai(modelId || DEFAULT_MODEL);
 
+    // Create record with in_progress status (reuse on retry)
+    let processedEmailId = metadata.get("processedEmailId") as
+      | Id<"processedEmails">
+      | undefined;
+    if (!processedEmailId) {
+      processedEmailId = await convex.mutation(api.processedEmails.create, {
+        userId: userId as Id<"users">,
+        inboundEmailId: inboundEmailId as Id<"inboundEmails">,
+        inboundEmailAddress: to,
+        sender: from,
+        subject: subject || undefined,
+      });
+      metadata.set("processedEmailId", processedEmailId);
+    }
+
+    const startTime = Date.now();
     logger.info("Processing audio email", { from, to, subject });
 
     if (attachments.length === 0) {
-      logger.warn("No audio attachments found in email");
-      return { status: "no_audio", message: "No audio attachments found" };
+      throw new Error("No audio attachments found");
     }
 
-    // Process all attachments in parallel
     const results = await Promise.all(
       attachments.map(async (attachment) => {
         logger.info(`Transcribing: ${attachment.filename}`);
 
-        const { text: transcription } = await transcribe({
-          model: openai.transcription("whisper-1"),
-          audio: new URL(attachment.downloadUrl),
+        // Fetch audio and call doGenerate directly to set the correct mediaType.
+        // The AI SDK's transcribe() auto-detects mediaType from magic bytes but
+        // has a bug with m4a/mp4 files (checks for 'ftyp' at offset 0, but it's at offset 4).
+        const audioResponse = await fetch(attachment.downloadUrl);
+        if (!audioResponse.ok) {
+          throw new Error(`Failed to download ${attachment.filename}: ${audioResponse.status}`);
+        }
+        const audioData = new Uint8Array(await audioResponse.arrayBuffer());
+
+        const model = openai.transcription("whisper-1");
+        const result = await model.doGenerate({
+          audio: audioData,
+          mediaType: attachment.contentType,
         });
+        const transcription = result.text;
 
         logger.info("Transcription complete", {
           filename: attachment.filename,
           length: transcription.length,
         });
 
-        const { text: summary } = await generateText({
-          model: "openai/gpt-5.1-thinking",
+        const { output, usage } = await generateText({
+          model: summaryModel,
+          output: Output.object({ schema: summarySchema }),
           system: `You are an expert at analyzing transcribed audio notes. Extract all meaningful information and organize it clearly.
 
-Your response should include:
-1. **Summary** - A concise summary of the main points
-2. **Key Points** - Bullet points of important information
-3. **Action Items** - Any tasks, to-dos, or follow-ups mentioned
-4. **Dates & Deadlines** - Any dates or deadlines mentioned
-5. **People & Contacts** - Any people or organizations mentioned
-6. **Additional Notes** - Any other relevant information
-
-Only include sections that have content. Format using clean HTML for email readability.`,
+For the title: write a concise single-line summary of what the audio is about.
+For the summary: write a thorough plain text summary covering all key points discussed.
+For actionItems: extract any tasks, to-dos, follow-ups, or deadlines mentioned. Each item should be a single line. If none, return an empty array.`,
           prompt: `Please analyze this transcribed audio note:\n\n${transcription}`,
         });
 
-        return {
-          filename: attachment.filename,
-          transcription,
-          summary,
-        };
+        if (!output) throw new Error(`Failed to generate summary for ${attachment.filename}`);
+
+        return { filename: attachment.filename, transcription, ...output, usage };
       })
     );
 
-    // Send the results back via email
+    // Send results email
     const emailBody = results
       .map(
         (r) => `
         <div style="margin-bottom: 32px; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px;">
-          <h2 style="margin: 0 0 12px 0; color: #111827; font-size: 18px;">
-            ${r.filename}
-          </h2>
-
-          <div style="margin-bottom: 20px;">
-            ${r.summary}
-          </div>
-
+          <h2 style="margin: 0 0 12px 0; color: #111827; font-size: 18px;">${r.title}</h2>
+          <p style="margin: 0 0 16px 0; color: #374151; line-height: 1.6;">${r.summary}</p>
+          ${r.actionItems.length > 0 ? `
+          <div style="margin-bottom: 16px;">
+            <h3 style="margin: 0 0 8px 0; color: #111827; font-size: 14px; font-weight: 600;">Action Items</h3>
+            <ul style="margin: 0; padding-left: 20px; color: #374151;">
+              ${r.actionItems.map((item) => `<li style="margin-bottom: 4px;">${item}</li>`).join("")}
+            </ul>
+          </div>` : ""}
           <details style="margin-top: 16px;">
-            <summary style="cursor: pointer; color: #6b7280; font-size: 14px;">
-              View Full Transcription
-            </summary>
-            <div style="margin-top: 8px; padding: 12px; background: #f9fafb; border-radius: 4px; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">
-              ${r.transcription}
-            </div>
+            <summary style="cursor: pointer; color: #6b7280; font-size: 14px;">View Full Transcription</summary>
+            <div style="margin-top: 8px; padding: 12px; background: #f9fafb; border-radius: 4px; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${r.transcription}</div>
           </details>
-        </div>
-      `
+        </div>`
       )
       .join("");
 
     const replySubject = subject
       ? `Re: ${subject} - Audio Notes Processed`
       : "Your Audio Notes - Processed";
-
     const fromDomain = process.env.RESEND_INBOUND_DOMAIN ?? "yourdomain.com";
 
     await resend.emails.send({
@@ -114,22 +155,40 @@ Only include sections that have content. Format using clean HTML for email reada
               ${results.length} audio file${results.length > 1 ? "s" : ""} processed
             </p>
           </div>
-
           ${emailBody}
-
           <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 12px;">
             Processed by Audio Notes
           </div>
-        </div>
-      `,
+        </div>`,
     });
 
     logger.info("Results email sent", { to: from });
 
-    return {
-      status: "success",
-      filesProcessed: results.length,
-      sentTo: from,
-    };
+    // Aggregate token usage
+    const totalUsage = results.reduce(
+      (acc, r) => ({
+        input: acc.input + (r.usage?.inputTokens ?? 0),
+        output: acc.output + (r.usage?.outputTokens ?? 0),
+        total: acc.total + (r.usage?.totalTokens ?? 0),
+      }),
+      { input: 0, output: 0, total: 0 }
+    );
+
+    // Mark as complete
+    await convex.mutation(api.processedEmails.updateStatus, {
+      id: processedEmailId,
+      status: "complete",
+      title: results.map((r) => r.title).join(" | "),
+      summary: results.map((r) => r.summary).join("\n\n"),
+      actionItems: results.flatMap((r) => r.actionItems),
+      content: results.map((r) => r.transcription).join("\n\n"),
+      processingTimeMs: Date.now() - startTime,
+      model: modelId || DEFAULT_MODEL,
+      inputTokens: totalUsage.input,
+      outputTokens: totalUsage.output,
+      totalTokens: totalUsage.total,
+    });
+
+    return { status: "success", filesProcessed: results.length, sentTo: from };
   },
 });

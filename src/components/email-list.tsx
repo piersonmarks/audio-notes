@@ -23,6 +23,7 @@ import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent } from "
 import { Copy, Check } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { AddEmailDialog } from "@/components/add-email-dialog";
 import { EmailRowActions } from "@/components/email-row-actions";
 
@@ -50,7 +51,53 @@ export function EmailList() {
   const emails = useQuery(api.inboundEmails.getAll);
 
   if (emails === undefined) {
-    return null; // loading
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div className="space-y-1.5">
+            <CardTitle>Email Addresses</CardTitle>
+            <CardDescription>
+              Manage your inbound audio processing email addresses.
+            </CardDescription>
+          </div>
+          <Skeleton className="h-9 w-24" />
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Inbound Email</TableHead>
+                <TableHead>Tags</TableHead>
+                <TableHead>Allowed Senders</TableHead>
+                <TableHead>Enabled</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {[1, 2].map((i) => (
+                <TableRow key={i}>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      <Skeleton className="h-4 w-48" />
+                      <Skeleton className="h-6 w-6 rounded-md" />
+                    </div>
+                  </TableCell>
+                  <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+                  <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+                  <TableCell><Skeleton className="h-5 w-9" /></TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <Skeleton className="h-8 w-12" />
+                      <Skeleton className="h-8 w-14" />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    );
   }
 
   if (emails.length === 0) {
@@ -82,7 +129,7 @@ export function EmailList() {
             Manage your inbound audio processing email addresses.
           </CardDescription>
         </div>
-        <AddEmailDialog label="Add Email" />
+        <AddEmailDialog label="Add Email" disabled={emails.length >= 5} />
       </CardHeader>
       <CardContent>
         <Table>
@@ -98,9 +145,9 @@ export function EmailList() {
           <TableBody>
             {emails.map((email) => (
               <TableRow key={email._id}>
-                <TableCell>
+                <TableCell className="max-w-[200px]">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-sm">{email.email}</span>
+                    <span className="font-mono text-sm line-clamp-1 overflow-x-auto break-all">{email.email}</span>
                     <CopyButton value={email.email} />
                   </div>
                 </TableCell>
@@ -136,6 +183,7 @@ export function EmailList() {
                   enabled={email.enabled}
                   tags={email.tags ?? []}
                   allowedSenders={email.allowedSenders}
+                  model={email.model}
                 />
               </TableRow>
             ))}

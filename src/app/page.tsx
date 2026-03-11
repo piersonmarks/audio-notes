@@ -1,95 +1,346 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { AudioLines, Loader2 } from "lucide-react";
+import { GitHubIcon } from "@/components/icons";
 
-function GitHubIcon({ className }: { className?: string }) {
+const FAKE_EMAILS = [
+  {
+    id: "1",
+    email: "notes-7f3a@inbound.audionotes.app",
+    tags: ["work"],
+    allowedSenders: ["me@example.com"],
+    enabled: true,
+  },
+  {
+    id: "2",
+    email: "ideas-b2c9@inbound.audionotes.app",
+    tags: ["personal"],
+    allowedSenders: [],
+    enabled: true,
+  },
+];
+
+const FAKE_PROCESSED = [
+  {
+    id: "1",
+    status: "complete" as const,
+    title: "Q1 Planning Meeting Notes",
+    subject: "Voice memo — Q1 planning",
+    sender: "me@example.com",
+    inboundEmailAddress: "notes-7f3a@inbound.audionotes.app",
+    receivedAt: Date.now() - 2 * 60 * 60 * 1000,
+    summary:
+      "Discussed roadmap priorities for Q1. Agreed to focus on mobile app launch and API v2. Marketing will prepare launch assets by end of January.",
+    actionItems: [
+      "Finalize mobile app feature list by Friday",
+      "Schedule API v2 design review with backend team",
+      "Share launch timeline with stakeholders",
+    ],
+    model: "gpt-5",
+    processingTimeMs: 12400,
+    inputTokens: 8200,
+    outputTokens: 420,
+    totalTokens: 8620,
+  },
+  {
+    id: "2",
+    status: "complete" as const,
+    title: "Product Feedback from Customer Call",
+    subject: "Audio — customer call recap",
+    sender: "me@example.com",
+    inboundEmailAddress: "notes-7f3a@inbound.audionotes.app",
+    receivedAt: Date.now() - 26 * 60 * 60 * 1000,
+    summary:
+      "Customer highlighted need for better search and batch export. Very positive on recent onboarding improvements. Willing to do a case study.",
+    actionItems: [
+      "Add search feature to backlog as high priority",
+      "Follow up about case study participation",
+    ],
+    model: "gpt-5",
+    processingTimeMs: 9800,
+    inputTokens: 6100,
+    outputTokens: 310,
+    totalTokens: 6410,
+  },
+  {
+    id: "3",
+    status: "in_progress" as const,
+    title: "Weekly standup recap",
+    subject: "Voice memo",
+    sender: "me@example.com",
+    inboundEmailAddress: "ideas-b2c9@inbound.audionotes.app",
+    receivedAt: Date.now() - 5 * 60 * 1000,
+    summary: undefined,
+    actionItems: undefined,
+    model: undefined,
+    processingTimeMs: undefined,
+    inputTokens: undefined,
+    outputTokens: undefined,
+    totalTokens: undefined,
+  },
+];
+
+const statusConfig = {
+  in_progress: { label: "In Progress", className: "bg-yellow-100 text-yellow-800" },
+  error: { label: "Error", variant: "destructive" as const },
+  complete: { label: "Complete", className: "bg-green-100 text-green-800" },
+};
+
+function formatDate(timestamp: number) {
+  return new Date(timestamp).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatDuration(ms: number) {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function formatTokens(n: number) {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return n.toString();
+}
+
+function MetadataItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
-      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12Z" />
-    </svg>
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      <span className="text-sm font-mono">{value}</span>
+    </div>
   );
 }
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-4xl px-4 py-12">
-        {/* Header */}
-        <nav className="flex items-center justify-between mb-16">
-          <span className="text-sm font-bold tracking-tight">Audio Notes</span>
+    <div className="flex min-h-screen flex-col bg-background">
+      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-primary text-primary-foreground">
+              <AudioLines className="h-4 w-4" />
+            </div>
+            <div className="flex h-8 flex-col justify-between">
+              <span className="text-sm font-semibold tracking-tight leading-none">Audio Notes</span>
+              <span className="text-[11px] leading-none text-muted-foreground">Voice to Notes</span>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
               <a href="https://github.com/piersonmarks/audio-notes" target="_blank" rel="noopener noreferrer">
                 <GitHubIcon className="h-4 w-4" />
               </a>
             </Button>
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/signin">Sign in</Link>
-            </Button>
-          </div>
-        </nav>
-
-        {/* Hero */}
-        <div className="mb-16 text-center">
-          <h1 className="text-3xl font-bold tracking-tight sm:text-5xl">
-            Audio in. Notes out.
-          </h1>
-          <p className="mx-auto mt-4 max-w-lg text-base text-muted-foreground sm:text-lg">
-            Forward emails with audio attachments to your unique address.
-            Get transcriptions, summaries, and action items back instantly.
-          </p>
-          <div className="mt-8">
-            <Button size="lg" asChild>
+            <Button size="sm" asChild>
               <Link href="/signin">Get started</Link>
             </Button>
           </div>
         </div>
+      </header>
 
-        {/* How it works */}
-        <div className="mb-16">
-          <h2 className="mb-6 text-center text-lg font-semibold tracking-tight">
-            How It Works
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {[
-              {
-                step: "1",
-                title: "Create an address",
-                description:
-                  "Set up a unique inbound email address and configure your allowed senders.",
-              },
-              {
-                step: "2",
-                title: "Send audio",
-                description:
-                  "Forward or send emails with audio attachments to your inbound address.",
-              },
-              {
-                step: "3",
-                title: "Get notes",
-                description:
-                  "Receive a transcription, summary, and action items — processed by AI.",
-              },
-            ].map((item) => (
-              <Card key={item.step}>
-                <CardContent className="pt-6">
-                  <div className="mb-2 text-2xl font-bold text-muted-foreground/40">
-                    {item.step}
-                  </div>
-                  <h3 className="mb-1 font-semibold">{item.title}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {item.description}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+      <main className="mx-auto w-full max-w-4xl px-4 py-8 flex-1">
+        <p className="mb-8 text-sm text-muted-foreground">
+          Send voice memos and audio files to your unique email address. Receive a summary and action items as an email reply. 100% Open Source.
+        </p>
+
+        {/* Email Addresses — fake data */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div className="space-y-1.5">
+              <CardTitle>Email Addresses</CardTitle>
+              <CardDescription>
+                Manage your inbound audio processing email addresses.
+              </CardDescription>
+            </div>
+            <Button size="sm" asChild>
+              <Link href="/signin">Add Email</Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Inbound Email</TableHead>
+                  <TableHead>Tags</TableHead>
+                  <TableHead>Allowed Senders</TableHead>
+                  <TableHead>Enabled</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {FAKE_EMAILS.map((email) => (
+                  <TableRow key={email.id}>
+                    <TableCell className="max-w-[200px]">
+                      <span className="font-mono text-sm line-clamp-1 overflow-x-auto break-all">{email.email}</span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {email.tags.map((tag) => (
+                          <Badge key={tag} variant="default">{tag}</Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {email.allowedSenders.length === 0 ? (
+                        <Badge variant="secondary">All senders</Badge>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {email.allowedSenders.map((s) => (
+                            <Badge key={s} variant="outline">{s}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{email.enabled ? "Yes" : "No"}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        {/* Processed Emails — fake data */}
+        <Card className="mt-8">
+          <CardHeader>
+            <CardTitle>Processed Emails</CardTitle>
+            <CardDescription>
+              Received emails and their processing status. Click to expand.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Accordion type="single" collapsible className="w-full" defaultValue="2">
+              {FAKE_PROCESSED.map((email) => {
+                const status = statusConfig[email.status];
+                return (
+                  <AccordionItem key={email.id} value={email.id}>
+                    <AccordionTrigger className="py-3 px-1 gap-3 hover:no-underline overflow-hidden">
+                      <div className="flex items-center gap-3 flex-1 min-w-0 overflow-hidden">
+                        <Badge
+                          variant={"variant" in status ? (status.variant as "destructive") : "secondary"}
+                          className={"className" in status ? status.className : undefined}
+                        >
+                          {email.status === "in_progress" && (
+                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          )}
+                          {status.label}
+                        </Badge>
+                        <span className="truncate font-medium text-sm min-w-0 flex-1">
+                          {email.title || email.subject || "—"}
+                        </span>
+                        <span className="text-muted-foreground text-xs whitespace-nowrap shrink-0 mr-2">
+                          {formatDate(email.receivedAt)}
+                        </span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-1">
+                      <div className="space-y-3">
+                        {email.summary && (
+                          <div>
+                            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                              Summary
+                            </span>
+                            <p className="text-sm mt-0.5 whitespace-pre-line">{email.summary}</p>
+                          </div>
+                        )}
+
+                        {email.actionItems && email.actionItems.length > 0 && (
+                          <div>
+                            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                              Action Items
+                            </span>
+                            <ul className="mt-1 list-disc list-inside space-y-0.5">
+                              {email.actionItems.map((item, i) => (
+                                <li key={i} className="text-sm">{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 rounded-md bg-muted/50 p-3">
+                          <MetadataItem label="Sender" value={email.sender} />
+                          <MetadataItem label="Inbound Address" value={<span className="line-clamp-1 overflow-x-auto break-all">{email.inboundEmailAddress}</span>} />
+                          <MetadataItem label="Received" value={formatDate(email.receivedAt)} />
+                          {email.subject && (
+                            <MetadataItem label="Subject" value={email.subject} />
+                          )}
+                        </div>
+
+                        {(email.processingTimeMs != null || email.totalTokens != null || email.model) && (
+                          <div>
+                            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                              Processing Details
+                            </span>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 rounded-md bg-muted/50 p-3 mt-1">
+                              {email.model && (
+                                <MetadataItem label="Model" value={email.model} />
+                              )}
+                              {email.processingTimeMs != null && (
+                                <MetadataItem label="Processing Time" value={formatDuration(email.processingTimeMs)} />
+                              )}
+                              {email.inputTokens != null && (
+                                <MetadataItem label="Input Tokens" value={formatTokens(email.inputTokens)} />
+                              )}
+                              {email.outputTokens != null && (
+                                <MetadataItem label="Output Tokens" value={formatTokens(email.outputTokens)} />
+                              )}
+                              {email.totalTokens != null && (
+                                <MetadataItem label="Total Tokens" value={formatTokens(email.totalTokens)} />
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
+          </CardContent>
+        </Card>
+
+        {/* How It Works */}
+        <div className="mt-8 border bg-muted/50 p-4">
+          <p className="text-xs font-medium mb-2">How It Works</p>
+          <ol className="grid gap-1 text-xs text-muted-foreground">
+            <li><span className="font-medium text-foreground">1.</span> Create an inbound email and add allowed senders.</li>
+            <li><span className="font-medium text-foreground">2.</span> Send an email with audio attachments to your address.</li>
+            <li><span className="font-medium text-foreground">3.</span> Get a transcription, summary, and action items back.</li>
+          </ol>
         </div>
+      </main>
 
-        {/* Footer */}
-        <footer className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-          <span>Audio Notes</span>
-          <span>&middot;</span>
+      <footer className="border-t">
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4 text-[11px] text-muted-foreground">
+          <a href="https://www.jellypod.com/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">&copy; {new Date().getFullYear()} Jellypod, Inc.</a>
           <a
             href="https://github.com/piersonmarks/audio-notes"
             target="_blank"
@@ -99,8 +350,8 @@ export default function Home() {
             <GitHubIcon className="h-3 w-3" />
             GitHub
           </a>
-        </footer>
-      </div>
+        </div>
+      </footer>
     </div>
   );
 }

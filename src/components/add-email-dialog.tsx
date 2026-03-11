@@ -42,8 +42,10 @@ function parseSendersList(input: string): string[] {
 
 export function AddEmailDialog({
   label = "Add Email Address",
+  disabled = false,
 }: {
   label?: string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const create = useMutation(api.inboundEmails.create);
@@ -81,7 +83,7 @@ export function AddEmailDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button>{label}</Button>
+        <Button disabled={disabled}>{label}</Button>
       </DialogTrigger>
       <DialogContent>
         <form onSubmit={form.handleSubmit(onSubmit)}>

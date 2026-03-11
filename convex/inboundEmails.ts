@@ -1,15 +1,10 @@
-import { query, mutation, QueryCtx, MutationCtx } from "./_generated/server";
+import { query, mutation } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { uniqueNamesGenerator, adjectives, animals } from "unique-names-generator";
 import { v } from "convex/values";
+import { requireAuth } from "./utils";
 
 const DOMAIN = "soleebpro.resend.app";
-
-async function requireAuth(ctx: QueryCtx | MutationCtx) {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) throw new Error("Not authenticated");
-  return userId;
-}
 
 function generateEmailAddress(): string {
   const prefix = uniqueNamesGenerator({
@@ -25,7 +20,10 @@ export const getAll = query({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
-    return await ctx.db.query("inboundEmails").collect();
+    return await ctx.db
+      .query("inboundEmails")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
   },
 });
 
@@ -45,19 +43,29 @@ export const create = mutation({
     tags: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    const userId = await requireAuth(ctx);
+
+    const userEmails = await ctx.db
+      .query("inboundEmails")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+    if (userEmails.length >= 5) {
+      console.warn("User attempted to create more than 5 email addresses");
+      return null;
+    }
 
     let email: string;
-    let existing;
+    let collision;
     do {
       email = generateEmailAddress();
-      existing = await ctx.db
+      collision = await ctx.db
         .query("inboundEmails")
         .withIndex("by_email", (q) => q.eq("email", email))
         .first();
-    } while (existing);
+    } while (collision);
 
     return await ctx.db.insert("inboundEmails", {
+      userId,
       email,
       enabled: true,
       allowedSenders: args.allowedSenders,
@@ -93,6 +101,16 @@ export const updateTags = mutation({
     const doc = await ctx.db.get(args.id);
     if (!doc) throw new Error("Not found");
     await ctx.db.patch(args.id, { tags: args.tags });
+  },
+});
+
+export const updateModel = mutation({
+  args: { id: v.id("inboundEmails"), model: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const doc = await ctx.db.get(args.id);
+    if (!doc) throw new Error("Not found");
+    await ctx.db.patch(args.id, { model: args.model });
   },
 });
 

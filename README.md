@@ -1,6 +1,6 @@
 # Audio Notes
 
-Send audio files via email, get back AI-powered transcriptions and summaries.
+Send voice memos and audio files to your unique email address. Get a summary and any action items back as an email reply. Open Source.
 
 **How it works:**
 1. Create an inbound email address
@@ -9,7 +9,7 @@ Send audio files via email, get back AI-powered transcriptions and summaries.
 
 ## Tech Stack
 
-Next.js 16 · Convex · OpenAI Whisper · GPT-5.1 Thinking (via Vercel AI Gateway) · Resend · Trigger.dev
+Next.js 16 · Convex · OpenAI Whisper · GPT-5.4 · Resend · Trigger.dev
 
 ## Setup
 

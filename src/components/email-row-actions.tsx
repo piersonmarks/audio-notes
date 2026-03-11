@@ -27,12 +27,14 @@ export function EmailRowActions({
   enabled,
   tags,
   allowedSenders,
+  model,
 }: {
   id: Id<"inboundEmails">;
   email: string;
   enabled: boolean;
   tags: string[];
   allowedSenders: string[];
+  model?: string;
 }) {
   const [isPending, setIsPending] = useState(false);
   const toggle = useMutation(api.inboundEmails.toggleEnabled);
@@ -63,6 +65,7 @@ export function EmailRowActions({
             email={email}
             tags={tags}
             allowedSenders={allowedSenders}
+            model={model}
           >
             <Button variant="ghost" size="sm" disabled={isPending}>
               Edit

@@ -22,6 +22,24 @@ import {
   FieldDescription,
 } from "@/components/ui/field";
 import { TagInput } from "@/components/tag-input";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const MODEL_OPTIONS = [
+  { value: "default", label: "Default (GPT-5.4)" },
+  { value: "gpt-5.4", label: "GPT-5.4" },
+  { value: "gpt-5.2", label: "GPT-5.2" },
+  { value: "gpt-5.1", label: "GPT-5.1" },
+  { value: "gpt-5", label: "GPT-5" },
+  { value: "gpt-5-mini", label: "GPT-5 Mini" },
+  { value: "gpt-5-nano", label: "GPT-5 Nano" },
+];
 
 function parseSendersList(input: string): string[] {
   return input
@@ -35,12 +53,14 @@ export function EditEmailDialog({
   email,
   tags,
   allowedSenders,
+  model,
   children,
 }: {
   id: Id<"inboundEmails">;
   email: string;
   tags: string[];
   allowedSenders: string[];
+  model?: string;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -48,15 +68,20 @@ export function EditEmailDialog({
   const [sendersValue, setSendersValue] = useState(
     allowedSenders.join(", ")
   );
+  const [modelValue, setModelValue] = useState(model ?? "default");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [saving, setSaving] = useState(false);
   const updateTagsMut = useMutation(api.inboundEmails.updateTags);
   const updateSendersMut = useMutation(api.inboundEmails.updateAllowedSenders);
+  const updateModelMut = useMutation(api.inboundEmails.updateModel);
 
   function handleOpenChange(value: boolean) {
     setOpen(value);
     if (!value) {
       setTagValue(tags);
       setSendersValue(allowedSenders.join(", "));
+      setModelValue(model ?? "default");
+      setShowAdvanced(false);
     }
   }
 
@@ -68,6 +93,10 @@ export function EditEmailDialog({
         updateSendersMut({
           id,
           allowedSenders: sendersValue ? parseSendersList(sendersValue) : [],
+        }),
+        updateModelMut({
+          id,
+          model: modelValue === "default" ? undefined : modelValue,
         }),
       ]);
       toast.success("Settings updated");
@@ -116,6 +145,45 @@ export function EditEmailDialog({
               all senders.
             </FieldDescription>
           </Field>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showAdvanced ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+              Advanced Settings
+            </button>
+
+            {showAdvanced && (
+              <div className="mt-3 grid gap-4">
+                <Field>
+                  <FieldLabel>Summarization Model</FieldLabel>
+                  <Select value={modelValue} onValueChange={setModelValue}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MODEL_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    The AI model used to summarize transcribed audio. Leave as
+                    default unless you have a reason to change it.
+                  </FieldDescription>
+                </Field>
+              </div>
+            )}
+          </div>
         </div>
 
         <DialogFooter>

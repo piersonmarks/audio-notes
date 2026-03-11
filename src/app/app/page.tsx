@@ -3,6 +3,7 @@ import { ProcessedEmailList } from "@/components/processed-email-list";
 import { SignOutButton } from "@/components/sign-out-button";
 import { HowItWorks } from "@/components/how-it-works";
 import { AudioLines } from "lucide-react";
+import { GitHubIcon } from "@/components/icons";
 
 export default function Home() {
   return (
@@ -25,10 +26,6 @@ export default function Home() {
       <main className="mx-auto w-full max-w-4xl px-4 py-8 flex-1">
         <div className="mb-8">
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Dashboard</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Send audio files to your unique email address. Get transcriptions
-            and summaries back instantly.
-          </p>
         </div>
 
         <EmailList />
@@ -38,8 +35,16 @@ export default function Home() {
 
       <footer className="border-t">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4 text-[11px] text-muted-foreground">
-          <span>&copy; {new Date().getFullYear()} Audio Notes</span>
-          <span>Built with Convex, Resend &amp; Trigger.dev</span>
+          <a href="https://www.jellypod.com/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">&copy; {new Date().getFullYear()} Jellypod, Inc.</a>
+          <a
+            href="https://github.com/piersonmarks/audio-notes"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+          >
+            <GitHubIcon className="h-3 w-3" />
+            GitHub
+          </a>
         </div>
       </footer>
     </div>

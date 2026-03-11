@@ -50,7 +50,7 @@ export default function SignInPage() {
               {loading ? "Sending..." : "Send code"}
             </Button>
             <Button variant="ghost" className="w-full" asChild>
-              <a href="/app">Back to home</a>
+              <a href="/">Back to home</a>
             </Button>
           </form>
         </div>

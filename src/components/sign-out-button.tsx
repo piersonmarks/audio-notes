@@ -19,15 +19,14 @@ export function SignOutButton() {
   const user = useQuery(api.users.currentUser);
 
   const email = user?.email as string | undefined;
-  const initial = email ? email[0].toUpperCase() : "?";
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <Avatar className="h-9 w-9 cursor-pointer">
-            <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
-              {initial}
+            <AvatarFallback className="bg-primary text-primary-foreground">
+              <User className="h-4 w-4" />
             </AvatarFallback>
           </Avatar>
         </button>

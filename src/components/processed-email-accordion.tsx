@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Download } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,7 +35,9 @@ type ProcessedEmail = {
   sender: string;
   forwardedBy?: string;
   receivedAt: number;
+  title?: string;
   summary?: string;
+  actionItems?: string[];
   content?: string;
   errorMessage?: string;
   processingTimeMs?: number;
@@ -85,10 +88,9 @@ function EmailActions({ email }: { email: ProcessedEmail }) {
   const [isPending, setIsPending] = useState(false);
   const remove = useMutation(api.processedEmails.remove);
 
-  function handleDownload() {
-    if (!email.content) return;
-    const filename = `${email.subject || "email"}-${new Date(email.receivedAt).toISOString().slice(0, 10)}.md`;
-    const blob = new Blob([email.content], { type: "text/markdown" });
+  function downloadFile(content: string, suffix: string) {
+    const filename = `${email.subject || "email"}-${new Date(email.receivedAt).toISOString().slice(0, 10)}-${suffix}.md`;
+    const blob = new Blob([content], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -100,12 +102,7 @@ function EmailActions({ email }: { email: ProcessedEmail }) {
   }
 
   return (
-    <div className="flex items-center gap-2 pt-3 border-t mt-3">
-      {email.content && (
-        <Button variant="outline" size="sm" disabled={isPending} onClick={handleDownload}>
-          Download
-        </Button>
-      )}
+    <div className="flex items-center justify-between pt-3 border-t mt-3">
       <AlertDialog>
         <AlertDialogTrigger asChild>
           <Button variant="outline" size="sm" className="text-destructive border-destructive/30" disabled={isPending}>
@@ -147,6 +144,19 @@ function EmailActions({ email }: { email: ProcessedEmail }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <div className="flex items-center gap-2">
+        {email.content && (
+          <Button variant="outline" size="sm" disabled={isPending} onClick={() => downloadFile(email.content!, "transcription")}>
+            Download Transcription
+          </Button>
+        )}
+        {email.summary && (
+          <Button size="sm" disabled={isPending} onClick={() => downloadFile(email.summary!, "summary")}>
+            <Download className="h-4 w-4" />
+            Download
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -158,30 +168,43 @@ export function ProcessedEmailAccordion({ emails }: { emails: ProcessedEmail[] }
         const status = statusConfig[email.status];
         return (
           <AccordionItem key={email._id} value={email._id}>
-            <AccordionTrigger className="py-3 px-1 gap-3 hover:no-underline">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
+            <AccordionTrigger className="py-3 px-1 gap-3 hover:no-underline overflow-hidden">
+              <div className="flex items-center gap-3 flex-1 min-w-0 overflow-hidden">
                 <Badge
                   variant={"variant" in status ? status.variant : "secondary"}
                   className={"className" in status ? status.className : undefined}
                 >
                   {status.label}
                 </Badge>
-                <span className="truncate font-medium text-sm">
-                  {email.summary || email.subject || "—"}
+                <span className="truncate font-medium text-sm min-w-0 flex-1">
+                  {email.title || email.subject || "—"}
                 </span>
-                <span className="text-muted-foreground text-xs whitespace-nowrap ml-auto mr-2">
+                <span className="text-muted-foreground text-xs whitespace-nowrap shrink-0 mr-2">
                   {formatDate(email.receivedAt)}
                 </span>
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-1">
-              <div className="space-y-4">
-                {email.summary && email.subject && email.summary !== email.subject && (
+              <div className="space-y-3">
+                {email.summary && (
                   <div>
                     <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                       Summary
                     </span>
-                    <p className="text-sm mt-0.5">{email.summary}</p>
+                    <p className="text-sm mt-0.5 whitespace-pre-line">{email.summary}</p>
+                  </div>
+                )}
+
+                {email.actionItems && email.actionItems.length > 0 && (
+                  <div>
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Action Items
+                    </span>
+                    <ul className="mt-1 list-disc list-inside space-y-0.5">
+                      {email.actionItems.map((item, i) => (
+                        <li key={i} className="text-sm">{item}</li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 
@@ -196,7 +219,7 @@ export function ProcessedEmailAccordion({ emails }: { emails: ProcessedEmail[] }
                   {email.forwardedBy && (
                     <MetadataItem label="Forwarded By" value={email.forwardedBy} />
                   )}
-                  <MetadataItem label="Inbound Address" value={email.inboundEmailAddress} />
+                  <MetadataItem label="Inbound Address" value={<span className="line-clamp-1 overflow-x-auto break-all">{email.inboundEmailAddress}</span>} />
                   <MetadataItem label="Received" value={formatDate(email.receivedAt)} />
                   {email.subject && (
                     <MetadataItem label="Subject" value={email.subject} />
